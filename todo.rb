@@ -2,6 +2,58 @@ require 'sinatra'
 require 'sinatra/reloader'
 require 'tilt/erubis'
 require 'sinatra/content_for'
+require 'pry'
+
+# setting up a configuration
+# that enables sintras session capabilities
+configure do
+  enable :sessions
+  set :session_secret, 'secret'
+end
+
+helpers do
+  def list_complete?(list)
+    todos_count(list) > 0 && todos_remaining_count(list) == 0
+  end
+
+  def todos_count(list)
+    list[:todos].size
+  end
+
+  def list_class(list)
+    'complete' if list_complete?(list)
+  end
+
+  def todos_remaining_count(list)
+    list[:todos].select { |todo| !todo[:completed] }.size
+  end
+
+  def list_count(list)
+    list[:todos].size
+  end
+
+  def sort_lists(lists, &block)
+    complete_lists, incomplete_lists = lists.partition do |list|
+      list_complete?(list)
+    end
+
+    incomplete_lists.each { |list| yield list, lists.index(list) }
+    complete_lists.each { |list| yield list, lists.index(list) }
+  end
+
+  def sort_todos(todos, &block)
+    complete_todos, incomplete_todos = todos.partition do |todo|
+      todo[:completed]
+    end
+
+    incomplete_todos.each { |todo| yield todo, todos.index(todo) }
+    complete_todos.each { |todo| yield todo, todos.index(todo) }
+  end
+end
+
+before do
+  session[:lists] ||= []
+end
 
 def error_for_list_name(name)
   if !(1..100).cover? name.size
@@ -15,17 +67,6 @@ def error_for_todo_text(text)
   if !(1..100).cover? text.size
     'Todo must be between 1 and 100 characters.'
   end
-end
-
-# setting up a configuration
-# that enables sintras session capabilities
-configure do
-  enable :sessions
-  set :session_secret, 'secret'
-end
-
-before do
-  session[:lists] ||= []
 end
 
 get '/' do
@@ -132,8 +173,23 @@ end
 post '/lists/:list_id/todo/:todo_id' do
   list_id = params[:list_id].to_i
   todo_id = params[:todo_id].to_i
-  list = session[:lists][list_id][:todos][todo_id]
-  list[:completed] = true
+  @list = session[:lists][list_id]
+
+  is_completed = params[:completed] == 'true'
+  @list[:todos][todo_id][:completed] = is_completed
+  session[:success] = 'The todo has been updated.'
+
+  redirect "/lists/#{list_id}"
+end
+
+post '/lists/:id/complete_all' do
+  list_id = params[:id].to_i
+  @list = session[:lists][list_id]
+
+  @list[:todos].each_with_index do |todo|
+    todo[:completed] = true
+  end
+  session[:success] = 'All todos have been completed.'
 
   redirect "/lists/#{list_id}"
 end
