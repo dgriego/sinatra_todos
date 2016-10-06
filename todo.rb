@@ -8,6 +8,7 @@ require 'sinatra/content_for'
 configure do
   enable :sessions
   set :session_secret, 'secret'
+  set :erb, :escape_html => true
 end
 
 helpers do
@@ -48,6 +49,14 @@ helpers do
     incomplete_todos.each { |todo| yield todo, todos.index(todo) }
     complete_todos.each { |todo| yield todo, todos.index(todo) }
   end
+
+  def load_list(list)
+    list = session[:lists][index] if index
+    return list if list
+
+    session[:error] = "The specified list was not found."
+    redirect "/lists"
+  end
 end
 
 before do
@@ -85,7 +94,7 @@ end
 # Edit A List'
 get '/lists/:id' do
   @list_id = params[:id].to_i
-  @list = session[:lists][@list_id]
+  @list = load_list(@list_id)
 
   erb :edit
 end
@@ -93,7 +102,7 @@ end
 # Edit A Todo Lists info
 get '/lists/:id/edit' do
   @id = params[:id].to_i
-  @list = session[:lists][@id]
+  @list = load_list(@id)
 
   erb :edit_list
 end
@@ -102,7 +111,7 @@ end
 post '/lists/:id' do
   list_name = params[:list_name].strip
   @id = params[:id].to_i
-  @list = session[:lists][@id]
+  @list = load_list(@id)
 
   error = error_for_list_name(list_name)
   if error
@@ -133,7 +142,7 @@ end
 # Create a New Todo for a List
 post '/lists/:list_id/todos' do
   @list_id = params[:list_id].to_i
-  @list = session[:lists][@list_id]
+  @list = load_list(@list_id)
   text = params[:todo].strip
 
   error = error_for_todo_text(text)
@@ -172,7 +181,7 @@ end
 post '/lists/:list_id/todo/:todo_id' do
   list_id = params[:list_id].to_i
   todo_id = params[:todo_id].to_i
-  @list = session[:lists][list_id]
+  @list = load_list(list_id)
 
   is_completed = params[:completed] == 'true'
   @list[:todos][todo_id][:completed] = is_completed
@@ -183,7 +192,7 @@ end
 
 post '/lists/:id/complete_all' do
   list_id = params[:id].to_i
-  @list = session[:lists][list_id]
+  @list = load_list(list_id)
 
   @list[:todos].each_with_index do |todo|
     todo[:completed] = true
