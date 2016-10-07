@@ -50,7 +50,7 @@ helpers do
     complete_todos.each { |todo| yield todo, todos.index(todo) }
   end
 
-  def load_list(list)
+  def load_list(index)
     list = session[:lists][index] if index
     return list if list
 
