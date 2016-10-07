@@ -139,21 +139,26 @@ post '/lists' do
   end
 end
 
+def next_todo_id(todos)
+  max = todos.map { |todo| todo[:id] }.max || 0
+  max + 1
+end
+
 # Create a New Todo for a List
-post '/lists/:list_id/todos' do
+post "/lists/:list_id/todos" do
   @list_id = params[:list_id].to_i
   @list = load_list(@list_id)
   text = params[:todo].strip
 
-  error = error_for_todo_text(text)
+  error = error_for_todo(text)
   if error
     session[:error] = error
-
-    erb :edit
+    erb :list
   else
-    @list[:todos] << { name: text, completed: false }
-    session[:success] = 'The todo was added.'
-
+    id = next_todo_id(@list[:todos])
+    @list[:todos] << { id: id, name: text, completed: false }
+    
+    session[:success] = "The todo was added."
     redirect "/lists/#{@list_id}"
   end
 end
@@ -162,32 +167,45 @@ end
 post '/lists/:id/destroy' do
   id = params[:id].to_i
   session[:lists].delete_at(id)
-  session[:success] = 'The list has been deleted.'
 
-  redirect '/lists'
+  # check if the request is being made via ajax
+  # env returns hash of request components
+  if env['HTTP_X_REQUESTED_WITH'] == 'XMLHttpRequest'
+    '/lists'
+  else
+    session[:success] = 'The list has been deleted.'
+    redirect '/lists'
+  end
 end
 
 # Delete a Todo Item
-post '/lists/:list_id/todo/:todo_id/destroy' do
-  list_id = params[:list_id].to_i
-  todo_id = params[:todo_id].to_i
-  session[:lists][list_id][:todos].delete_at(todo_id)
-  session[:success] = 'The todo has been deleted.'
+post '/lists/:list_id/todo/:id/destroy' do
+  @list_id = params[:list_id].to_i
+  @list = load_list(@list_id)
 
-  redirect "/lists/#{list_id}"
+  todo_id = params[:id].to_i
+  @list[:todos].reject! { |todo| todo[:id] == todo_id }
+  
+  if env["HTTP_X_REQUESTED_WITH"] == "XMLHttpRequest"
+    status 204
+  else
+    session[:success] = "The todo has been deleted."
+    redirect "/lists/#{@list_id}"
+  end
 end
 
 # Update status on a Todo item
-post '/lists/:list_id/todo/:todo_id' do
-  list_id = params[:list_id].to_i
-  todo_id = params[:todo_id].to_i
-  @list = load_list(list_id)
+post "/lists/:list_id/todo/:id" do
+  @list_id = params[:list_id].to_i
+  @list = load_list(@list_id)
 
-  is_completed = params[:completed] == 'true'
-  @list[:todos][todo_id][:completed] = is_completed
-  session[:success] = 'The todo has been updated.'
+  todo_id = params[:id].to_i
+  is_completed = params[:completed] == "true"
+  todo = @list[:todos].find { |todo| todo[:id] == todo_id }
+  todo[:completed] = is_completed
 
-  redirect "/lists/#{list_id}"
+  session[:success] = "The todo has been updated."
+  redirect "/lists/#{@list_id}"
 end
 
 post '/lists/:id/complete_all' do
